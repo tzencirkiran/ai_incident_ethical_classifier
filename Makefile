@@ -1,13 +1,14 @@
 PYTHON := /home/talha/miniforge3/envs/pyt/bin/python -u
 MODEL_DIR := model
 
-.PHONY: help preprocess baseline train test infer clean-processed clean-checkpoint clean
+.PHONY: help preprocess baseline train tune test infer clean-processed clean-checkpoint clean
 
 help:
 	@echo "Targets:"
 	@echo "  make preprocess           - build train/val/test splits from data/incidents_data.xlsx"
 	@echo "  make baseline             - train/evaluate a TF-IDF logistic regression baseline"
-	@echo "  make train                - fine-tune bert-tiny and tune per-label thresholds"
+	@echo "  make train [ARGS=\"...\"]   - fine-tune bert-tiny and tune per-label thresholds"
+	@echo "  make tune [ARGS=\"...\"]    - run TinyBERT grid from model/tuning_config.json"
 	@echo "  make test                 - evaluate the fine-tuned checkpoint"
 	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"] [SECTOR=\"...\"]"
 	@echo "                            - predict ethical-issue tags for an incident"
@@ -22,7 +23,10 @@ baseline:
 	$(PYTHON) $(MODEL_DIR)/baseline.py
 
 train:
-	$(PYTHON) $(MODEL_DIR)/fine_tune.py
+	$(PYTHON) $(MODEL_DIR)/fine_tune.py $(ARGS)
+
+tune:
+	$(PYTHON) $(MODEL_DIR)/tune.py $(ARGS)
 
 test:
 	$(PYTHON) $(MODEL_DIR)/evaluate.py
