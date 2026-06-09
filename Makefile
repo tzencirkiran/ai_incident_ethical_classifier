@@ -1,35 +1,41 @@
 PYTHON := /home/talha/miniforge3/envs/pyt/bin/python -u
 MODEL_DIR := model
+SPLIT ?= random
+PROCESSED_DIR ?= $(MODEL_DIR)/processed/$(SPLIT)
 
 .PHONY: help preprocess baseline train tune test infer clean-processed clean-checkpoint clean
 
 help:
 	@echo "Targets:"
-	@echo "  make preprocess           - build train/val/test splits from data/incidents_data.xlsx"
-	@echo "  make baseline             - train/evaluate a TF-IDF logistic regression baseline"
-	@echo "  make train [ARGS=\"...\"]   - fine-tune bert-tiny and tune per-label thresholds"
-	@echo "  make tune [ARGS=\"...\"]    - run TinyBERT grid from model/tuning_config.json"
-	@echo "  make test                 - evaluate the fine-tuned checkpoint"
+	@echo "  make preprocess [SPLIT=random] [ARGS=\"...\"] - build split artifacts under model/processed/\$${SPLIT}"
+	@echo "  make baseline [SPLIT=random]                 - train/evaluate a TF-IDF logistic regression baseline"
+	@echo "  make train [SPLIT=random] [ARGS=\"...\"]       - fine-tune bert-tiny and tune per-label thresholds"
+	@echo "  make tune [SPLIT=random] [ARGS=\"...\"]        - run TinyBERT grid from model/tuning_config.json"
+	@echo "  make test [SPLIT=random]                     - evaluate the fine-tuned checkpoint"
 	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"] [SECTOR=\"...\"]"
 	@echo "                            - predict ethical-issue tags for an incident"
+	@echo "Examples:"
+	@echo "  make preprocess"
+	@echo "  make preprocess SPLIT=temporal ARGS=\"--split temporal --val-year 2024 --test-year 2025\""
+	@echo "  make baseline SPLIT=temporal"
 	@echo "  make clean-processed      - remove generated train/val/test splits"
 	@echo "  make clean-checkpoint     - remove the fine-tuned checkpoint"
 	@echo "  make clean                - remove both processed data and checkpoint"
 
 preprocess:
-	$(PYTHON) $(MODEL_DIR)/preprocessing.py
+	$(PYTHON) $(MODEL_DIR)/preprocessing.py --split-name "$(SPLIT)" $(ARGS)
 
 baseline:
-	$(PYTHON) $(MODEL_DIR)/baseline.py
+	$(PYTHON) $(MODEL_DIR)/baseline.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
 
 train:
-	$(PYTHON) $(MODEL_DIR)/fine_tune.py $(ARGS)
+	$(PYTHON) $(MODEL_DIR)/fine_tune.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
 
 tune:
-	$(PYTHON) $(MODEL_DIR)/tune.py $(ARGS)
+	$(PYTHON) $(MODEL_DIR)/tune.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
 
 test:
-	$(PYTHON) $(MODEL_DIR)/evaluate.py
+	$(PYTHON) $(MODEL_DIR)/evaluate.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
 
 infer:
 	@if [ -z "$(HEADLINE)" ]; then \

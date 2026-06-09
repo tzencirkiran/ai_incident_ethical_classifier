@@ -5,6 +5,7 @@ alongside the checkpoint) and a per-label F1 / precision / recall breakdown.
 """
 import logging
 import os
+import argparse
 
 import numpy as np
 import torch
@@ -12,7 +13,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import f1_score, precision_score, recall_score
 from transformers import AutoModelForSequenceClassification
 
-PROCESSED_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+PROCESSED_ROOT = os.path.join(os.path.dirname(__file__), 'processed')
+DEFAULT_PROCESSED_DIR = os.path.join(PROCESSED_ROOT, 'random')
 CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'checkpoint')
 BATCH_SIZE = 32
 DEFAULT_THRESHOLD = 0.5  # fallback if a per-label thresholds.npy isn't found
@@ -23,8 +25,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 
-def load_split(name):
-    data = torch.load(os.path.join(PROCESSED_DIR, f'{name}.pt'))
+def parse_args():
+    parser = argparse.ArgumentParser(description='Evaluate the fine-tuned checkpoint.')
+    parser.add_argument('--processed-dir', default=DEFAULT_PROCESSED_DIR, help='Directory containing train/val/test .pt files')
+    return parser.parse_args()
+
+
+def load_split(name, processed_dir):
+    data = torch.load(os.path.join(processed_dir, f'{name}.pt'))
     dataset = TensorDataset(data['input_ids'], data['attention_mask'], data['labels'])
     return dataset
 
@@ -44,7 +52,9 @@ def predict_probs(model, loader):
 
 
 def main():
-    label_classes = np.load(os.path.join(PROCESSED_DIR, 'label_classes.npy'), allow_pickle=True)
+    args = parse_args()
+    logger.info('Loading processed split artifacts from %s', args.processed_dir)
+    label_classes = np.load(os.path.join(args.processed_dir, 'label_classes.npy'), allow_pickle=True)
 
     thresholds_path = os.path.join(CHECKPOINT_DIR, 'thresholds.npy')
     if os.path.exists(thresholds_path):
@@ -57,7 +67,7 @@ def main():
     logger.info('Loading checkpoint from %s', CHECKPOINT_DIR)
     model = AutoModelForSequenceClassification.from_pretrained(CHECKPOINT_DIR).to(DEVICE)
 
-    test_loader = DataLoader(load_split('test'), batch_size=BATCH_SIZE)
+    test_loader = DataLoader(load_split('test', args.processed_dir), batch_size=BATCH_SIZE)
     logger.info('Evaluating on %d test examples', len(test_loader.dataset))
 
     probs, labels = predict_probs(model, test_loader)

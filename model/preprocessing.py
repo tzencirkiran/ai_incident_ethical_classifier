@@ -4,6 +4,8 @@ Target: multi-label classification over a normalized set of canonical
 "Ethical issue (taxonomy)" tags.
 Input text: Headline plus safe incident metadata, concatenated into one string.
 """
+import argparse
+import json
 import logging
 import os
 import re
@@ -17,12 +19,15 @@ from transformers import AutoTokenizer
 
 MODEL_NAME = 'prajjwal1/bert-tiny'
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'incidents_data.xlsx')
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+OUTPUT_ROOT = os.path.join(os.path.dirname(__file__), 'processed')
 CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'checkpoint')
 
 NUM_LABELS = 14
 MAX_LENGTH = 128
 RANDOM_STATE = 42
+DEFAULT_SPLIT_NAME = 'random'
+DEFAULT_VAL_YEAR = 2024
+DEFAULT_TEST_YEAR = 2025
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -166,8 +171,87 @@ def load_tokenizer():
     return AutoTokenizer.from_pretrained(MODEL_NAME)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Build processed train/val/test split artifacts.')
+    parser.add_argument('--split', choices=['random', 'temporal'], default='random')
+    parser.add_argument(
+        '--split-name',
+        default=None,
+        help='Output subdirectory under model/processed. Defaults to the split mode name.',
+    )
+    parser.add_argument('--output-root', default=OUTPUT_ROOT)
+    parser.add_argument('--val-year', type=int, default=DEFAULT_VAL_YEAR)
+    parser.add_argument('--test-year', type=int, default=DEFAULT_TEST_YEAR)
+    return parser.parse_args()
+
+
+def build_random_split(texts, labels):
+    train_texts, temp_texts, train_labels, temp_labels = train_test_split(
+        texts, labels, test_size=0.3, random_state=RANDOM_STATE
+    )
+    val_texts, test_texts, val_labels, test_labels = train_test_split(
+        temp_texts, temp_labels, test_size=0.5, random_state=RANDOM_STATE
+    )
+    return {
+        'train': (train_texts, train_labels),
+        'val': (val_texts, val_labels),
+        'test': (test_texts, test_labels),
+    }
+
+
+def build_temporal_split(df, labels, val_year, test_year):
+    years = pd.to_numeric(df['Occurred'], errors='coerce')
+    valid_years = years.notna()
+    dropped = int((~valid_years).sum())
+    if dropped:
+        logger.info('Dropping %d incidents with missing/non-numeric Occurred year for temporal split', dropped)
+
+    df = df[valid_years].reset_index(drop=True)
+    labels = labels[valid_years.to_numpy()]
+    years = years[valid_years].astype(int).reset_index(drop=True)
+
+    split_masks = {
+        'train': years < val_year,
+        'val': (years >= val_year) & (years < test_year),
+        'test': years >= test_year,
+    }
+    splits = {}
+    for split_name, mask in split_masks.items():
+        split_texts = df.loc[mask, 'text'].tolist()
+        split_labels = labels[mask.to_numpy()]
+        if len(split_texts) == 0:
+            raise ValueError(f'Temporal split produced no {split_name} examples')
+        splits[split_name] = (split_texts, split_labels)
+    return splits
+
+
+def save_splits(splits, tokenizer, output_dir, label_classes, metadata):
+    os.makedirs(output_dir, exist_ok=True)
+    for split_name, (split_texts, split_labels) in splits.items():
+        encodings = tokenize(split_texts, tokenizer)
+        torch.save(
+            {
+                'input_ids': encodings['input_ids'],
+                'attention_mask': encodings['attention_mask'],
+                'labels': torch.tensor(split_labels, dtype=torch.float32),
+                'texts': split_texts,
+            },
+            os.path.join(output_dir, f'{split_name}.pt'),
+        )
+        logger.info('%s: %d examples -> %s.pt', split_name, len(split_texts), split_name)
+
+    np.save(os.path.join(output_dir, 'label_classes.npy'), np.array(label_classes))
+    with open(os.path.join(output_dir, 'split_metadata.json'), 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2)
+    logger.info('Label classes saved to %s: %s', os.path.join(output_dir, 'label_classes.npy'), list(label_classes))
+    logger.info('Split metadata saved to %s', os.path.join(output_dir, 'split_metadata.json'))
+
+
 def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    args = parse_args()
+    split_name = args.split_name or args.split
+    output_dir = os.path.join(args.output_root, split_name)
+    os.makedirs(output_dir, exist_ok=True)
 
     logger.info('Loading incidents from %s', DATA_PATH)
     df = load_incidents()
@@ -185,36 +269,34 @@ def main():
         logger.info('  %s: %d', cls, count)
 
     texts = df['text'].tolist()
-
-    # 70 / 15 / 15 split
-    train_texts, temp_texts, train_labels, temp_labels = train_test_split(
-        texts, labels, test_size=0.3, random_state=RANDOM_STATE
-    )
-    val_texts, test_texts, val_labels, test_labels = train_test_split(
-        temp_texts, temp_labels, test_size=0.5, random_state=RANDOM_STATE
-    )
+    if args.split == 'random':
+        splits = build_random_split(texts, labels)
+        metadata = {
+            'split': args.split,
+            'split_name': split_name,
+            'random_state': RANDOM_STATE,
+            'counts': {name: len(split_texts) for name, (split_texts, _) in splits.items()},
+        }
+    else:
+        splits = build_temporal_split(df, labels, args.val_year, args.test_year)
+        years = pd.to_numeric(df['Occurred'], errors='coerce')
+        metadata = {
+            'split': args.split,
+            'split_name': split_name,
+            'val_year': args.val_year,
+            'test_year': args.test_year,
+            'year_ranges': {
+                'train': f'< {args.val_year}',
+                'val': f'{args.val_year} <= year < {args.test_year}',
+                'test': f'>= {args.test_year}',
+            },
+            'dropped_missing_years': int(years.isna().sum()),
+            'counts': {name: len(split_texts) for name, (split_texts, _) in splits.items()},
+        }
 
     tokenizer = load_tokenizer()
-
-    for split_name, split_texts, split_labels in [
-        ('train', train_texts, train_labels),
-        ('val', val_texts, val_labels),
-        ('test', test_texts, test_labels),
-    ]:
-        encodings = tokenize(split_texts, tokenizer)
-        torch.save(
-            {
-                'input_ids': encodings['input_ids'],
-                'attention_mask': encodings['attention_mask'],
-                'labels': torch.tensor(split_labels, dtype=torch.float32),
-                'texts': split_texts,
-            },
-            os.path.join(OUTPUT_DIR, f'{split_name}.pt'),
-        )
-        logger.info('%s: %d examples -> %s.pt', split_name, len(split_texts), split_name)
-
-    np.save(os.path.join(OUTPUT_DIR, 'label_classes.npy'), np.array(mlb.classes_))
-    logger.info('Label classes saved to label_classes.npy: %s', list(mlb.classes_))
+    logger.info('Writing %s split artifacts to %s', args.split, output_dir)
+    save_splits(splits, tokenizer, output_dir, mlb.classes_, metadata)
 
 
 if __name__ == '__main__':

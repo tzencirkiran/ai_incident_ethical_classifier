@@ -5,6 +5,7 @@ are tuned on validation data and reported on the held-out test split.
 """
 import logging
 import os
+import argparse
 
 import numpy as np
 import torch
@@ -13,7 +14,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, precision_score, recall_score
 from sklearn.multiclass import OneVsRestClassifier
 
-PROCESSED_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+PROCESSED_ROOT = os.path.join(os.path.dirname(__file__), 'processed')
+DEFAULT_PROCESSED_DIR = os.path.join(PROCESSED_ROOT, 'random')
 
 MAX_FEATURES = 20000
 NGRAM_RANGE = (1, 2)
@@ -26,8 +28,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 
-def load_split(name):
-    data = torch.load(os.path.join(PROCESSED_DIR, f'{name}.pt'))
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train/evaluate the TF-IDF logistic baseline.')
+    parser.add_argument('--processed-dir', default=DEFAULT_PROCESSED_DIR, help='Directory containing train/val/test .pt files')
+    return parser.parse_args()
+
+
+def load_split(name, processed_dir):
+    data = torch.load(os.path.join(processed_dir, f'{name}.pt'))
     return data['texts'], data['labels'].numpy()
 
 
@@ -45,11 +53,13 @@ def tune_per_label_thresholds(probs, labels, label_classes):
 
 
 def main():
-    label_classes = np.load(os.path.join(PROCESSED_DIR, 'label_classes.npy'), allow_pickle=True)
+    args = parse_args()
+    logger.info('Loading processed split artifacts from %s', args.processed_dir)
+    label_classes = np.load(os.path.join(args.processed_dir, 'label_classes.npy'), allow_pickle=True)
 
-    train_texts, train_labels = load_split('train')
-    val_texts, val_labels = load_split('val')
-    test_texts, test_labels = load_split('test')
+    train_texts, train_labels = load_split('train', args.processed_dir)
+    val_texts, val_labels = load_split('val', args.processed_dir)
+    test_texts, test_labels = load_split('test', args.processed_dir)
 
     logger.info(
         'Training TF-IDF logistic baseline | %d train | %d val | %d test | %d labels',

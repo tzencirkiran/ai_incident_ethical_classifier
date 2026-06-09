@@ -64,3 +64,4 @@ Thumbs.db
 *.log
 logs/
 model/tuning/
+model/processed/*/

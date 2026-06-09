@@ -12,7 +12,8 @@ from sklearn.metrics import f1_score
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, get_linear_schedule_with_warmup
 
 MODEL_NAME = 'prajjwal1/bert-tiny'
-PROCESSED_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+PROCESSED_ROOT = os.path.join(os.path.dirname(__file__), 'processed')
+DEFAULT_PROCESSED_DIR = os.path.join(PROCESSED_ROOT, 'random')
 DEFAULT_CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'checkpoint')
 
 DEFAULT_EPOCHS = 15
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser(description='Fine-tune bert-tiny for multi-label incident tagging.')
     parser.add_argument('--output-dir', default=DEFAULT_CHECKPOINT_DIR, help='Directory for the best checkpoint')
+    parser.add_argument('--processed-dir', default=DEFAULT_PROCESSED_DIR, help='Directory containing train/val/test .pt files')
     parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS)
     parser.add_argument('--batch-size', type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument('--learning-rate', type=float, default=DEFAULT_LEARNING_RATE)
@@ -54,8 +56,8 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def load_split(name):
-    data = torch.load(os.path.join(PROCESSED_DIR, f'{name}.pt'))
+def load_split(name, processed_dir):
+    data = torch.load(os.path.join(processed_dir, f'{name}.pt'))
     dataset = TensorDataset(data['input_ids'], data['attention_mask'], data['labels'])
     return dataset
 
@@ -158,12 +160,13 @@ def train_model(args):
     if save_checkpoint:
         os.makedirs(args.output_dir, exist_ok=True)
 
-    label_classes = np.load(os.path.join(PROCESSED_DIR, 'label_classes.npy'), allow_pickle=True)
+    logger.info('Loading processed split artifacts from %s', args.processed_dir)
+    label_classes = np.load(os.path.join(args.processed_dir, 'label_classes.npy'), allow_pickle=True)
     num_labels = len(label_classes)
     id2label, label2id = build_label_maps(label_classes)
 
-    train_dataset = load_split('train')
-    val_dataset = load_split('val')
+    train_dataset = load_split('train', args.processed_dir)
+    val_dataset = load_split('val', args.processed_dir)
     generator = torch.Generator()
     generator.manual_seed(args.seed)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=generator)
@@ -282,6 +285,7 @@ def train_model(args):
             'warmup_ratio': args.warmup_ratio,
             'seed': args.seed,
             'weighted_bce': args.weighted_bce,
+            'processed_dir': args.processed_dir,
         },
     }
     if save_checkpoint:

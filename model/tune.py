@@ -12,7 +12,7 @@ import logging
 import os
 from types import SimpleNamespace
 
-from fine_tune import DEFAULT_CHECKPOINT_DIR, DEFAULT_SEED, train_model
+from fine_tune import DEFAULT_CHECKPOINT_DIR, DEFAULT_PROCESSED_DIR, DEFAULT_SEED, train_model
 
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'tuning_config.json')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'tuning')
@@ -61,6 +61,7 @@ def parse_bool_list(value):
 def parse_args():
     parser = argparse.ArgumentParser(description='Run TinyBERT hyperparameter grid search.')
     parser.add_argument('--config', default=DEFAULT_CONFIG_PATH, help='JSON config file for the sweep')
+    parser.add_argument('--processed-dir', default=DEFAULT_PROCESSED_DIR, help='Directory containing train/val/test .pt files')
     parser.add_argument('--epochs', default=None, help='Comma-separated epoch counts')
     parser.add_argument('--batch-sizes', default=None, help='Comma-separated batch sizes')
     parser.add_argument('--learning-rates', default=None)
@@ -169,9 +170,10 @@ def flatten_result(run_index, config, metrics):
     }
 
 
-def as_train_args(config, no_save=True):
+def as_train_args(config, processed_dir, no_save=True):
     return SimpleNamespace(
         output_dir=DEFAULT_CHECKPOINT_DIR,
+        processed_dir=processed_dir,
         epochs=config['epochs'],
         batch_size=config['batch_size'],
         learning_rate=config['learning_rate'],
@@ -198,7 +200,7 @@ def main():
     results = []
     for i, config in enumerate(configs, start=1):
         logger.info('Starting run %d/%d', i, len(configs))
-        metrics = train_model(as_train_args(config, no_save=True))
+        metrics = train_model(as_train_args(config, args.processed_dir, no_save=True))
         result = flatten_result(i, config, metrics)
         results.append(result)
         save_results(results)
@@ -216,7 +218,7 @@ def main():
         best_config = {key: best[key] for key in [
             'epochs', 'batch_size', 'learning_rate', 'weight_decay', 'warmup_ratio', 'weighted_bce', 'seed'
         ]}
-        train_model(as_train_args(best_config, no_save=False))
+        train_model(as_train_args(best_config, args.processed_dir, no_save=False))
 
 
 if __name__ == '__main__':
