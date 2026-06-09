@@ -22,7 +22,7 @@ RESULTS_CSV = os.path.join(RESULTS_DIR, 'tinybert_grid_results.csv')
 DEFAULT_CONFIG = {
     'epochs': [10, 15],
     'batch_sizes': [32, 64],
-    'learning_rates': [5e-5, 1e-4, 2e-4],
+    'learning_rates': [5e-5, 1e-4, 2e-4, 5e-4],
     'weight_decays': [0.0, 0.01],
     'warmup_ratios': [0.1],
     'weighted_bce': [False, True],

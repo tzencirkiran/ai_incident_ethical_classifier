@@ -1,7 +1,7 @@
 {
   "epochs": [10, 15],
   "batch_sizes": [32, 64],
-  "learning_rates": [0.00005, 0.0001, 0.0002],
+  "learning_rates": [0.00005, 0.0001, 0.0002, 0.0005],
   "weight_decays": [0.0, 0.01],
   "warmup_ratios": [0.1],
   "weighted_bce": [false, true],
