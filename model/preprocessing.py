@@ -1,0 +1,201 @@
+"""Build train/val/test splits for fine-tuning bert-tiny on the AI incidents dataset.
+
+Target: multi-label classification over a normalized set of canonical
+"Ethical issue (taxonomy)" tags.
+Input text: Headline + Purpose + Technology, concatenated into one string.
+"""
+import logging
+import os
+import re
+
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MultiLabelBinarizer
+from transformers import AutoTokenizer
+
+MODEL_NAME = 'prajjwal1/bert-tiny'
+DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'incidents_data.xlsx')
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+
+NUM_LABELS = 14
+MAX_LENGTH = 64
+RANDOM_STATE = 42
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+# Maps raw tag spellings/variants to a canonical category. Anything not listed
+# here is left as-is and will be dropped later if it falls outside the top-N.
+TAG_NORMALIZATION = {
+    'transaprency': 'Transparency',
+    'transpareny': 'Transparency',
+    'accountabiity': 'Accountability',
+    'accountabiilty': 'Accountability',
+    'accuracy/relibaility': 'Accuracy/reliability',
+    'accuracy/reliablity': 'Accuracy/reliability',
+    'accuracy/reliabiity': 'Accuracy/reliability',
+    'privacy/surveillamce': 'Privacy/surveillance',
+    'privacy/surveillance/surveillance': 'Privacy/surveillance',
+    'surveillanc': 'Privacy/surveillance',
+    'surveillance': 'Privacy/surveillance',
+    'privacy': 'Privacy/surveillance',
+    'compeititon/monopolisation': 'Competition/monopolisation',
+    'appropropriation': 'Appropriation',
+    'accessiblity': 'Accessibility',
+    'dual/multi-use': 'Dual use',
+    'human/civil rights': 'Human rights/civil liberties',
+    'employment - jobs': 'Employment/labour',
+    'employment - jobs, pay': 'Employment/labour',
+    'employment/labour - jobs': 'Employment/labour',
+    'employment': 'Employment/labour',
+    'job loss/losses loss': 'Employment/labour',
+    'oversight/review': 'Oversight',
+    'scope creep/normalisation': 'Normalisation',
+}
+
+
+def normalize_tag(tag):
+    """Collapse a raw tag string to a canonical category name.
+
+    Compound 'Fairness - <attributes>' variants collapse to plain 'Fairness';
+    known typos/synonyms are mapped via TAG_NORMALIZATION; everything else is
+    passed through unchanged.
+    """
+    tag = tag.strip()
+    if not tag:
+        return None
+    if re.match(r'(?i)^fairness\b', tag):
+        return 'Fairness'
+    key = tag.lower()
+    if key in TAG_NORMALIZATION:
+        return TAG_NORMALIZATION[key]
+    return tag
+
+
+def load_incidents(path=DATA_PATH):
+    """Load the incidents spreadsheet and reconstruct its flat header.
+
+    The sheet has a 3-row hierarchical header: row 1 holds main column names,
+    row 2 holds sub-category names that only apply to the 'Impacted area' and
+    'External harm' groups.
+    """
+    raw = pd.read_excel(path, header=None)
+    main_row, sub_row = raw.iloc[1].tolist(), raw.iloc[2].tolist()
+
+    columns = []
+    current_main = None
+    for main, sub in zip(main_row, sub_row):
+        main = main.strip() if isinstance(main, str) else None
+        sub = sub.strip() if isinstance(sub, str) else None
+        if main is not None:
+            current_main = main
+        columns.append(f'{current_main} - {sub}' if sub is not None else current_main)
+
+    df = raw.iloc[3:].reset_index(drop=True)
+    df.columns = columns
+    df = df.iloc[:, :-1]  # drop near-empty trailing duplicate 'Summary/links' column
+    return df
+
+
+def build_text(df):
+    """Concatenate Headline, Purpose and Technology into a single input string per row."""
+    def join_row(row):
+        parts = []
+        if isinstance(row['Headline'], str):
+            parts.append(row['Headline'].strip())
+        if isinstance(row['Purpose'], str):
+            parts.append(f"Purpose: {row['Purpose'].strip()}")
+        if isinstance(row['Technology'], str):
+            parts.append(f"Technology: {row['Technology'].strip()}")
+        return '. '.join(parts)
+
+    return df.apply(join_row, axis=1)
+
+
+def build_labels(df):
+    """Parse, normalize and binarize the 'Ethical issue (taxonomy)' column.
+
+    Keeps only the NUM_LABELS most frequent canonical tags; rows whose tags are
+    entirely outside this set are dropped (their label vector would be all-zero).
+    Returns (kept_tags, mlb) where kept_tags[i] is the list of canonical tags
+    retained for row i.
+    """
+    raw_tags = df['Ethical issue (taxonomy)'].apply(
+        lambda s: [normalize_tag(t) for t in s.split(';')] if isinstance(s, str) else []
+    )
+    normalized = raw_tags.apply(lambda tags: [t for t in tags if t])
+
+    tag_counts = normalized.explode().value_counts()
+    top_tags = set(tag_counts.head(NUM_LABELS).index)
+
+    kept = normalized.apply(lambda tags: [t for t in tags if t in top_tags])
+    mlb = MultiLabelBinarizer(classes=sorted(top_tags))
+    return kept, mlb
+
+
+def tokenize(texts, tokenizer):
+    return tokenizer(
+        list(texts),
+        padding='max_length',
+        truncation=True,
+        max_length=MAX_LENGTH,
+        return_tensors='pt',
+    )
+
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    logger.info('Loading incidents from %s', DATA_PATH)
+    df = load_incidents()
+    logger.info('Loaded %d incidents', len(df))
+    df['text'] = build_text(df)
+    kept_tags, mlb = build_labels(df)
+
+    mask = kept_tags.apply(len) > 0
+    df = df[mask].reset_index(drop=True)
+    kept_tags = kept_tags[mask].reset_index(drop=True)
+
+    labels = mlb.fit_transform(kept_tags)
+    logger.info('Kept %d incidents with %d canonical labels:', len(df), len(mlb.classes_))
+    for cls, count in zip(mlb.classes_, labels.sum(axis=0)):
+        logger.info('  %s: %d', cls, count)
+
+    texts = df['text'].tolist()
+
+    # 70 / 15 / 15 split
+    train_texts, temp_texts, train_labels, temp_labels = train_test_split(
+        texts, labels, test_size=0.3, random_state=RANDOM_STATE
+    )
+    val_texts, test_texts, val_labels, test_labels = train_test_split(
+        temp_texts, temp_labels, test_size=0.5, random_state=RANDOM_STATE
+    )
+
+    logger.info('Loading tokenizer for %s', MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+    for split_name, split_texts, split_labels in [
+        ('train', train_texts, train_labels),
+        ('val', val_texts, val_labels),
+        ('test', test_texts, test_labels),
+    ]:
+        encodings = tokenize(split_texts, tokenizer)
+        torch.save(
+            {
+                'input_ids': encodings['input_ids'],
+                'attention_mask': encodings['attention_mask'],
+                'labels': torch.tensor(split_labels, dtype=torch.float32),
+                'texts': split_texts,
+            },
+            os.path.join(OUTPUT_DIR, f'{split_name}.pt'),
+        )
+        logger.info('%s: %d examples -> %s.pt', split_name, len(split_texts), split_name)
+
+    np.save(os.path.join(OUTPUT_DIR, 'label_classes.npy'), np.array(mlb.classes_))
+    logger.info('Label classes saved to label_classes.npy: %s', list(mlb.classes_))
+
+
+if __name__ == '__main__':
+    main()
