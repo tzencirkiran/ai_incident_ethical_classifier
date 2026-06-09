@@ -98,6 +98,15 @@ def build_label_maps(label_classes):
     return id2label, label2id
 
 
+def load_tokenizer():
+    if os.path.exists(os.path.join(CHECKPOINT_DIR, 'tokenizer_config.json')):
+        logger.info('Loading tokenizer from local checkpoint %s', CHECKPOINT_DIR)
+        return AutoTokenizer.from_pretrained(CHECKPOINT_DIR, local_files_only=True)
+
+    logger.info('Loading tokenizer for %s', MODEL_NAME)
+    return AutoTokenizer.from_pretrained(MODEL_NAME)
+
+
 def main():
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
@@ -108,8 +117,7 @@ def main():
     train_loader = DataLoader(load_split('train'), batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(load_split('val'), batch_size=BATCH_SIZE)
 
-    logger.info('Loading tokenizer for %s', MODEL_NAME)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = load_tokenizer()
 
     logger.info('Loading model %s', MODEL_NAME)
     model = AutoModelForSequenceClassification.from_pretrained(

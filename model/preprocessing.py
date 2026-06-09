@@ -2,7 +2,7 @@
 
 Target: multi-label classification over a normalized set of canonical
 "Ethical issue (taxonomy)" tags.
-Input text: Headline + Purpose + Technology, concatenated into one string.
+Input text: Headline plus safe incident metadata, concatenated into one string.
 """
 import logging
 import os
@@ -18,9 +18,10 @@ from transformers import AutoTokenizer
 MODEL_NAME = 'prajjwal1/bert-tiny'
 DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'incidents_data.xlsx')
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'processed')
+CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'checkpoint')
 
 NUM_LABELS = 14
-MAX_LENGTH = 64
+MAX_LENGTH = 128
 RANDOM_STATE = 42
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -54,6 +55,17 @@ TAG_NORMALIZATION = {
     'oversight/review': 'Oversight',
     'scope creep/normalisation': 'Normalisation',
 }
+
+TEXT_FIELDS = [
+    ('Purpose', 'Purpose'),
+    ('Technology', 'Technology'),
+    ('Deployer', 'Deployer'),
+    ('Developer', 'Developer'),
+    ('System name', 'System'),
+    ('News trigger (taxonomy)', 'News trigger'),
+    ('Impacted area - Jurisdiction', 'Jurisdiction'),
+    ('Impacted area - Sector', 'Sector'),
+]
 
 
 def normalize_tag(tag):
@@ -100,15 +112,15 @@ def load_incidents(path=DATA_PATH):
 
 
 def build_text(df):
-    """Concatenate Headline, Purpose and Technology into a single input string per row."""
+    """Build the model input from headline plus safe incident metadata."""
     def join_row(row):
         parts = []
         if isinstance(row['Headline'], str):
             parts.append(row['Headline'].strip())
-        if isinstance(row['Purpose'], str):
-            parts.append(f"Purpose: {row['Purpose'].strip()}")
-        if isinstance(row['Technology'], str):
-            parts.append(f"Technology: {row['Technology'].strip()}")
+        for column, label in TEXT_FIELDS:
+            value = row.get(column)
+            if isinstance(value, str) and value.strip():
+                parts.append(f'{label}: {value.strip()}')
         return '. '.join(parts)
 
     return df.apply(join_row, axis=1)
@@ -145,6 +157,15 @@ def tokenize(texts, tokenizer):
     )
 
 
+def load_tokenizer():
+    if os.path.exists(os.path.join(CHECKPOINT_DIR, 'tokenizer_config.json')):
+        logger.info('Loading tokenizer from local checkpoint %s', CHECKPOINT_DIR)
+        return AutoTokenizer.from_pretrained(CHECKPOINT_DIR, local_files_only=True)
+
+    logger.info('Loading tokenizer for %s', MODEL_NAME)
+    return AutoTokenizer.from_pretrained(MODEL_NAME)
+
+
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -173,8 +194,7 @@ def main():
         temp_texts, temp_labels, test_size=0.5, random_state=RANDOM_STATE
     )
 
-    logger.info('Loading tokenizer for %s', MODEL_NAME)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = load_tokenizer()
 
     for split_name, split_texts, split_labels in [
         ('train', train_texts, train_labels),

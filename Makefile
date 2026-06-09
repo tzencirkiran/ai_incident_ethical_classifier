@@ -9,7 +9,7 @@ help:
 	@echo "  make baseline             - train/evaluate a TF-IDF logistic regression baseline"
 	@echo "  make train                - fine-tune bert-tiny and tune per-label thresholds"
 	@echo "  make test                 - evaluate the fine-tuned checkpoint"
-	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"]"
+	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"] [SECTOR=\"...\"]"
 	@echo "                            - predict ethical-issue tags for an incident"
 	@echo "  make clean-processed      - remove generated train/val/test splits"
 	@echo "  make clean-checkpoint     - remove the fine-tuned checkpoint"
@@ -34,7 +34,13 @@ infer:
 	fi
 	$(PYTHON) $(MODEL_DIR)/infer.py "$(HEADLINE)" \
 		$(if $(PURPOSE),--purpose "$(PURPOSE)") \
-		$(if $(TECHNOLOGY),--technology "$(TECHNOLOGY)")
+		$(if $(TECHNOLOGY),--technology "$(TECHNOLOGY)") \
+		$(if $(DEPLOYER),--deployer "$(DEPLOYER)") \
+		$(if $(DEVELOPER),--developer "$(DEVELOPER)") \
+		$(if $(SYSTEM_NAME),--system-name "$(SYSTEM_NAME)") \
+		$(if $(NEWS_TRIGGER),--news-trigger "$(NEWS_TRIGGER)") \
+		$(if $(JURISDICTION),--jurisdiction "$(JURISDICTION)") \
+		$(if $(SECTOR),--sector "$(SECTOR)")
 
 clean-processed:
 	rm -rf $(MODEL_DIR)/processed

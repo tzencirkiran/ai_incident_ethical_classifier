@@ -13,7 +13,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 MODEL_NAME = 'prajjwal1/bert-tiny'
 CHECKPOINT_DIR = os.path.join(os.path.dirname(__file__), 'checkpoint')
-MAX_LENGTH = 64
+MAX_LENGTH = 128
 DEFAULT_THRESHOLD = 0.5  # fallback if a per-label thresholds.npy isn't found
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -22,13 +22,25 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 
-def build_text(headline, purpose=None, technology=None):
-    """Concatenate headline/purpose/technology the same way preprocessing.py does."""
+TEXT_FIELDS = [
+    ('purpose', 'Purpose'),
+    ('technology', 'Technology'),
+    ('deployer', 'Deployer'),
+    ('developer', 'Developer'),
+    ('system_name', 'System'),
+    ('news_trigger', 'News trigger'),
+    ('jurisdiction', 'Jurisdiction'),
+    ('sector', 'Sector'),
+]
+
+
+def build_text(headline, **metadata):
+    """Build the model input the same way preprocessing.py does."""
     parts = [headline.strip()]
-    if purpose:
-        parts.append(f'Purpose: {purpose.strip()}')
-    if technology:
-        parts.append(f'Technology: {technology.strip()}')
+    for key, label in TEXT_FIELDS:
+        value = metadata.get(key)
+        if value:
+            parts.append(f'{label}: {value.strip()}')
     return '. '.join(parts)
 
 
@@ -81,10 +93,26 @@ def main():
     parser.add_argument('headline', help='Incident headline text')
     parser.add_argument('--purpose', default=None, help='Stated purpose of the AI system')
     parser.add_argument('--technology', default=None, help='Technology category')
+    parser.add_argument('--deployer', default=None, help='Organization or person deploying the AI system')
+    parser.add_argument('--developer', default=None, help='Organization or person developing the AI system')
+    parser.add_argument('--system-name', default=None, help='AI system name')
+    parser.add_argument('--news-trigger', default=None, help='News trigger taxonomy value')
+    parser.add_argument('--jurisdiction', default=None, help='Impacted jurisdiction')
+    parser.add_argument('--sector', default=None, help='Impacted sector')
     args = parser.parse_args()
 
     tokenizer, model, label_classes, thresholds = load_model()
-    text = build_text(args.headline, args.purpose, args.technology)
+    text = build_text(
+        args.headline,
+        purpose=args.purpose,
+        technology=args.technology,
+        deployer=args.deployer,
+        developer=args.developer,
+        system_name=args.system_name,
+        news_trigger=args.news_trigger,
+        jurisdiction=args.jurisdiction,
+        sector=args.sector,
+    )
     logger.info('Running inference on: %s', text)
     predictions = predict(text, tokenizer, model, label_classes, thresholds)
 
