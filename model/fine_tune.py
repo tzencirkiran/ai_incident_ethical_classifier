@@ -21,8 +21,8 @@ DEFAULT_LEARNING_RATE = 5e-4
 DEFAULT_WEIGHT_DECAY = 0.0
 DEFAULT_WARMUP_RATIO = 0.1
 DEFAULT_SEED = 42
-# Fixed threshold used only for model-selection during training, so "best epoch"
-# doesn't depend on a threshold that gets tuned afterwards.
+# Fixed threshold kept for reporting during training. Checkpoint selection uses
+# validation F1 after per-label threshold tuning because final evaluation does too.
 SELECTION_THRESHOLD = 0.5
 THRESHOLD_GRID = np.arange(0.05, 0.95, 0.05)
 
@@ -103,17 +103,20 @@ def evaluate(model, loader, criterion, threshold=SELECTION_THRESHOLD):
 def evaluate_with_thresholds(model, loader, criterion, thresholds):
     """Evaluate using a per-label threshold vector instead of a single global cutoff."""
     probs, labels, loss = predict_probs(model, loader, criterion)
-    preds = probs >= thresholds[np.newaxis, :]
-    micro_f1 = f1_score(labels, preds, average='micro', zero_division=0)
-    macro_f1 = f1_score(labels, preds, average='macro', zero_division=0)
+    micro_f1, macro_f1 = score_with_thresholds(probs, labels, thresholds)
     return loss, micro_f1, macro_f1
 
 
-def tune_per_label_thresholds(model, loader, criterion, label_classes):
+def score_with_thresholds(probs, labels, thresholds):
+    preds = probs >= thresholds[np.newaxis, :]
+    micro_f1 = f1_score(labels, preds, average='micro', zero_division=0)
+    macro_f1 = f1_score(labels, preds, average='macro', zero_division=0)
+    return micro_f1, macro_f1
+
+
+def find_per_label_thresholds(probs, labels, label_classes, log=False):
     """Find, for each label independently, the threshold in THRESHOLD_GRID that
     maximizes that label's F1 score on the given (validation) set."""
-    probs, labels, _ = predict_probs(model, loader, criterion)
-
     thresholds = np.full(len(label_classes), SELECTION_THRESHOLD)
     for j, name in enumerate(label_classes):
         best_f1, best_t = -1.0, SELECTION_THRESHOLD
@@ -122,9 +125,15 @@ def tune_per_label_thresholds(model, loader, criterion, label_classes):
             if f1 > best_f1:
                 best_f1, best_t = f1, t
         thresholds[j] = best_t
-        logger.info('  %s: threshold=%.2f (val F1=%.4f)', name, best_t, best_f1)
+        if log:
+            logger.info('  %s: threshold=%.2f (val F1=%.4f)', name, best_t, best_f1)
 
     return thresholds
+
+
+def tune_per_label_thresholds(model, loader, criterion, label_classes):
+    probs, labels, _ = predict_probs(model, loader, criterion)
+    return find_per_label_thresholds(probs, labels, label_classes, log=True)
 
 
 def build_label_maps(label_classes):
@@ -188,6 +197,8 @@ def train_model(args):
 
     best_val_f1 = -1.0
     best_val_macro_f1 = -1.0
+    best_tuned_val_f1 = -1.0
+    best_tuned_val_macro_f1 = -1.0
     best_epoch = 0
     best_state = None
     for epoch in range(1, args.epochs + 1):
@@ -208,30 +219,43 @@ def train_model(args):
             running_loss += loss.item()
 
         train_loss = running_loss / len(train_loader)
-        val_loss, micro_f1, macro_f1 = evaluate(model, val_loader, criterion)
+        val_probs, val_labels, val_loss = predict_probs(model, val_loader, criterion)
+        micro_f1 = f1_score(val_labels, val_probs >= SELECTION_THRESHOLD, average='micro', zero_division=0)
+        macro_f1 = f1_score(val_labels, val_probs >= SELECTION_THRESHOLD, average='macro', zero_division=0)
+        epoch_thresholds = find_per_label_thresholds(val_probs, val_labels, label_classes)
+        tuned_micro_f1, tuned_macro_f1 = score_with_thresholds(val_probs, val_labels, epoch_thresholds)
         logger.info(
-            'Epoch %d/%d | train_loss=%.4f | val_loss=%.4f | val_micro_f1=%.4f | val_macro_f1=%.4f',
-            epoch, args.epochs, train_loss, val_loss, micro_f1, macro_f1
+            'Epoch %d/%d | train_loss=%.4f | val_loss=%.4f | val_micro_f1=%.4f | val_macro_f1=%.4f | '
+            'tuned_val_micro_f1=%.4f | tuned_val_macro_f1=%.4f',
+            epoch, args.epochs, train_loss, val_loss, micro_f1, macro_f1, tuned_micro_f1, tuned_macro_f1
         )
 
-        if micro_f1 > best_val_f1:
+        if (tuned_micro_f1, tuned_macro_f1) > (best_tuned_val_f1, best_tuned_val_macro_f1):
             best_val_f1 = micro_f1
             best_val_macro_f1 = macro_f1
+            best_tuned_val_f1 = tuned_micro_f1
+            best_tuned_val_macro_f1 = tuned_macro_f1
             best_epoch = epoch
             best_state = {name: tensor.detach().cpu().clone() for name, tensor in model.state_dict().items()}
             if save_checkpoint:
                 model.save_pretrained(args.output_dir)
                 tokenizer.save_pretrained(args.output_dir)
                 np.save(os.path.join(args.output_dir, 'label_classes.npy'), label_classes)
-                logger.info('  -> new best (val_micro_f1=%.4f), checkpoint saved to %s', micro_f1, args.output_dir)
+                logger.info(
+                    '  -> new best (tuned_val_micro_f1=%.4f), checkpoint saved to %s',
+                    tuned_micro_f1, args.output_dir
+                )
             else:
-                logger.info('  -> new best (val_micro_f1=%.4f)', micro_f1)
+                logger.info('  -> new best (tuned_val_micro_f1=%.4f)', tuned_micro_f1)
 
     if best_state is not None:
         model.load_state_dict(best_state)
         model.to(DEVICE)
 
-    logger.info('Done. Best val_micro_f1=%.4f at epoch %d', best_val_f1, best_epoch)
+    logger.info(
+        'Done. Best tuned_val_micro_f1=%.4f at epoch %d',
+        best_tuned_val_f1, best_epoch
+    )
 
     logger.info('Tuning per-label decision thresholds on the validation set...')
     thresholds = tune_per_label_thresholds(model, val_loader, criterion, label_classes)
