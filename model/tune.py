@@ -15,9 +15,9 @@ from types import SimpleNamespace
 from fine_tune import DEFAULT_CHECKPOINT_DIR, DEFAULT_PROCESSED_DIR, DEFAULT_SEED, train_model
 
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'tuning_config.json')
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'tuning')
-RESULTS_JSON = os.path.join(RESULTS_DIR, 'tinybert_grid_results.json')
-RESULTS_CSV = os.path.join(RESULTS_DIR, 'tinybert_grid_results.csv')
+TUNING_CONFIG_DIR = os.path.join(os.path.dirname(__file__), 'tuning_configs')
+RESULTS_ROOT = os.path.join(os.path.dirname(__file__), 'tuning')
+RESULTS_BASENAME = 'tinybert_grid_results'
 
 DEFAULT_CONFIG = {
     'epochs': [15, 20, 25],
@@ -60,8 +60,14 @@ def parse_bool_list(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run TinyBERT hyperparameter grid search.')
-    parser.add_argument('--config', default=DEFAULT_CONFIG_PATH, help='JSON config file for the sweep')
+    parser.add_argument(
+        '--config',
+        default=None,
+        help='JSON config file for the sweep. Defaults to model/tuning_configs/<split>.json when present.',
+    )
     parser.add_argument('--processed-dir', default=DEFAULT_PROCESSED_DIR, help='Directory containing train/val/test .pt files')
+    parser.add_argument('--run-name', default=None, help='Name for result folder under model/tuning')
+    parser.add_argument('--results-root', default=RESULTS_ROOT, help='Root directory for tuning result files')
     parser.add_argument('--epochs', default=None, help='Comma-separated epoch counts')
     parser.add_argument('--batch-sizes', default=None, help='Comma-separated batch sizes')
     parser.add_argument('--learning-rates', default=None)
@@ -73,6 +79,31 @@ def parse_args():
     parser.add_argument('--dry-run', action='store_true', help='Print planned configs without training')
     parser.add_argument('--save-best', action='store_true', help='Retrain the best config into model/checkpoint')
     return parser.parse_args()
+
+
+def split_name_from_processed_dir(processed_dir):
+    return os.path.basename(os.path.normpath(processed_dir)) or 'default'
+
+
+def resolve_config_path(args):
+    if args.config:
+        return args.config
+
+    split_name = split_name_from_processed_dir(args.processed_dir)
+    split_config = os.path.join(TUNING_CONFIG_DIR, f'{split_name}.json')
+    if os.path.exists(split_config):
+        return split_config
+
+    return DEFAULT_CONFIG_PATH
+
+
+def resolve_result_paths(args):
+    run_name = args.run_name or split_name_from_processed_dir(args.processed_dir)
+    results_dir = os.path.join(args.results_root, run_name)
+    return (
+        os.path.join(results_dir, f'{RESULTS_BASENAME}.json'),
+        os.path.join(results_dir, f'{RESULTS_BASENAME}.csv'),
+    )
 
 
 def load_config(path):
@@ -88,7 +119,7 @@ def load_config(path):
 
 
 def resolve_config(args):
-    config = load_config(args.config)
+    config = load_config(resolve_config_path(args))
     overrides = {
         'epochs': args.epochs,
         'batch_sizes': args.batch_sizes,
@@ -131,9 +162,9 @@ def build_grid(config):
     return configs
 
 
-def save_results(results):
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    with open(RESULTS_JSON, 'w', encoding='utf-8') as f:
+def save_results(results, results_json, results_csv):
+    os.makedirs(os.path.dirname(results_json), exist_ok=True)
+    with open(results_json, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2)
 
     fieldnames = [
@@ -151,7 +182,7 @@ def save_results(results):
         'tuned_val_micro_f1',
         'tuned_val_macro_f1',
     ]
-    with open(RESULTS_CSV, 'w', newline='', encoding='utf-8') as f:
+    with open(results_csv, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for result in results:
@@ -188,7 +219,10 @@ def as_train_args(config, processed_dir, no_save=True):
 def main():
     args = parse_args()
     config = resolve_config(args)
+    results_json, results_csv = resolve_result_paths(args)
     configs = build_grid(config)
+    logger.info('Processed split directory: %s', args.processed_dir)
+    logger.info('Results will be saved to %s and %s', results_json, results_csv)
     logger.info('Sweep config: %s', config)
     logger.info('Planned %d TinyBERT runs', len(configs))
     for i, config in enumerate(configs, start=1):
@@ -203,7 +237,7 @@ def main():
         metrics = train_model(as_train_args(config, args.processed_dir, no_save=True))
         result = flatten_result(i, config, metrics)
         results.append(result)
-        save_results(results)
+        save_results(results, results_json, results_csv)
         logger.info(
             'Run %d done | tuned_val_micro_f1=%.4f tuned_val_macro_f1=%.4f',
             i, result['tuned_val_micro_f1'], result['tuned_val_macro_f1']
@@ -211,7 +245,7 @@ def main():
 
     best = max(results, key=lambda row: (row['tuned_val_micro_f1'], row['tuned_val_macro_f1']))
     logger.info('Best validation config: %s', best)
-    logger.info('Results saved to %s and %s', RESULTS_JSON, RESULTS_CSV)
+    logger.info('Results saved to %s and %s', results_json, results_csv)
 
     if args.save_best:
         logger.info('Retraining best config into %s', DEFAULT_CHECKPOINT_DIR)

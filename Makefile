@@ -2,6 +2,7 @@ PYTHON := /home/talha/miniforge3/envs/pyt/bin/python -u
 MODEL_DIR := model
 SPLIT ?= random
 PROCESSED_DIR ?= $(MODEL_DIR)/processed/$(SPLIT)
+TUNING_CONFIG ?=
 
 .PHONY: help preprocess baseline train tune test infer clean-processed clean-checkpoint clean
 
@@ -10,7 +11,7 @@ help:
 	@echo "  make preprocess [SPLIT=random] [ARGS=\"...\"] - build split artifacts under model/processed/\$${SPLIT}"
 	@echo "  make baseline [SPLIT=random]                 - train/evaluate a TF-IDF logistic regression baseline"
 	@echo "  make train [SPLIT=random] [ARGS=\"...\"]       - fine-tune bert-tiny and tune per-label thresholds"
-	@echo "  make tune [SPLIT=random] [ARGS=\"...\"]        - run TinyBERT grid from model/tuning_config.json"
+	@echo "  make tune [SPLIT=random] [TUNING_CONFIG=...]  - run TinyBERT grid for the selected split"
 	@echo "  make test [SPLIT=random]                     - evaluate the fine-tuned checkpoint"
 	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"] [SECTOR=\"...\"]"
 	@echo "                            - predict ethical-issue tags for an incident"
@@ -18,6 +19,7 @@ help:
 	@echo "  make preprocess"
 	@echo "  make preprocess SPLIT=temporal ARGS=\"--split temporal --val-year 2024 --test-year 2025\""
 	@echo "  make baseline SPLIT=temporal"
+	@echo "  make tune SPLIT=temporal"
 	@echo "  make clean-processed      - remove generated train/val/test splits"
 	@echo "  make clean-checkpoint     - remove the fine-tuned checkpoint"
 	@echo "  make clean                - remove both processed data and checkpoint"
@@ -32,7 +34,8 @@ train:
 	$(PYTHON) $(MODEL_DIR)/fine_tune.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
 
 tune:
-	$(PYTHON) $(MODEL_DIR)/tune.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
+	$(PYTHON) $(MODEL_DIR)/tune.py --processed-dir "$(PROCESSED_DIR)" --run-name "$(SPLIT)" \
+		$(if $(TUNING_CONFIG),--config "$(TUNING_CONFIG)") $(ARGS)
 
 test:
 	$(PYTHON) $(MODEL_DIR)/evaluate.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)

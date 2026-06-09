@@ -1,0 +1,10 @@
+{
+  "epochs": [15, 20, 25],
+  "batch_sizes": [32],
+  "learning_rates": [0.0003, 0.0005, 0.0007],
+  "weight_decays": [0.0, 0.01],
+  "warmup_ratios": [0.05, 0.1, 0.2],
+  "weighted_bce": [true],
+  "seeds": [42],
+  "max_runs": null
+}
