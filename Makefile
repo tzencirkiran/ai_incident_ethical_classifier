@@ -3,6 +3,7 @@ MODEL_DIR := model
 SPLIT ?= random
 PROCESSED_DIR ?= $(MODEL_DIR)/processed/$(SPLIT)
 TUNING_CONFIG ?=
+PREPROCESS_ARGS ?= $(if $(filter temporal,$(SPLIT)),--split temporal --val-year 2024 --test-year 2025,--split random)
 
 .PHONY: help preprocess baseline train tune test infer clean-processed clean-checkpoint clean
 
@@ -25,7 +26,7 @@ help:
 	@echo "  make clean                - remove both processed data and checkpoint"
 
 preprocess:
-	$(PYTHON) $(MODEL_DIR)/preprocessing.py --split-name "$(SPLIT)" $(ARGS)
+	$(PYTHON) $(MODEL_DIR)/preprocessing.py --split-name "$(SPLIT)" $(PREPROCESS_ARGS) $(ARGS)
 
 baseline:
 	$(PYTHON) $(MODEL_DIR)/baseline.py --processed-dir "$(PROCESSED_DIR)" $(ARGS)
