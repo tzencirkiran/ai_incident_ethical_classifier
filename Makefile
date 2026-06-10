@@ -5,7 +5,10 @@ PROCESSED_DIR ?= $(MODEL_DIR)/processed/$(SPLIT)
 TUNING_CONFIG ?=
 PREPROCESS_ARGS ?= $(if $(filter temporal,$(SPLIT)),--split temporal --val-year 2024 --test-year 2025,--split random)
 
-.PHONY: help preprocess baseline train tune test infer clean-processed clean-checkpoint clean
+HOST ?= 127.0.0.1
+PORT ?= 8000
+
+.PHONY: help preprocess baseline train tune test infer serve clean-processed clean-checkpoint clean
 
 help:
 	@echo "Targets:"
@@ -16,6 +19,7 @@ help:
 	@echo "  make test [SPLIT=random]                     - evaluate the fine-tuned checkpoint"
 	@echo "  make infer HEADLINE=\"...\" [PURPOSE=\"...\"] [TECHNOLOGY=\"...\"] [SECTOR=\"...\"]"
 	@echo "                            - predict ethical-issue tags for an incident"
+	@echo "  make serve [HOST=127.0.0.1] [PORT=8000]      - serve the FastAPI presentation UI"
 	@echo "Examples:"
 	@echo "  make preprocess"
 	@echo "  make preprocess SPLIT=temporal ARGS=\"--split temporal --val-year 2024 --test-year 2025\""
@@ -55,6 +59,9 @@ infer:
 		$(if $(NEWS_TRIGGER),--news-trigger "$(NEWS_TRIGGER)") \
 		$(if $(JURISDICTION),--jurisdiction "$(JURISDICTION)") \
 		$(if $(SECTOR),--sector "$(SECTOR)")
+
+serve:
+	$(PYTHON) -m uvicorn presentation_app:app --host "$(HOST)" --port "$(PORT)"
 
 clean-processed:
 	rm -rf $(MODEL_DIR)/processed

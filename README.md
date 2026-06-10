@@ -46,6 +46,12 @@ make train
 make test
 ```
 
+Presentation UI:
+
+```bash
+make serve
+```
+
 Temporal split:
 
 ```bash
@@ -71,6 +77,8 @@ make test SPLIT=temporal
   - Evaluates the saved TinyBERT checkpoint on the chosen split
 - `make infer HEADLINE="..." [PURPOSE="..."] [TECHNOLOGY="..."] [SECTOR="..."]`
   - Runs a single prediction against the saved TinyBERT checkpoint
+- `make serve [HOST=...] [PORT=...]`
+  - Serves the FastAPI presentation UI against the saved TinyBERT checkpoint
 
 ## Tuning Profiles
 

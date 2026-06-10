@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Ethics Incident Classifier</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workbench" aria-label="AI ethics incident classifier">
+        <div class="input-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">TinyBERT multi-label classifier</p>
+              <h1>AI Ethics Incident Classifier</h1>
+            </div>
+            <div id="status" class="status" data-state="loading">Loading</div>
+          </div>
+
+          <form id="incident-form" class="incident-form">
+            <label class="field field-wide">
+              <span>Headline</span>
+              <textarea id="headline" name="headline" rows="4" maxlength="500" required>AI hiring system rejects qualified applicants</textarea>
+            </label>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Purpose</span>
+                <input id="purpose" name="purpose" value="Recruiting">
+              </label>
+              <label class="field">
+                <span>Technology</span>
+                <input id="technology" name="technology" value="Machine learning">
+              </label>
+              <label class="field">
+                <span>Sector</span>
+                <input id="sector" name="sector" value="Employment">
+              </label>
+              <label class="field">
+                <span>Jurisdiction</span>
+                <input id="jurisdiction" name="jurisdiction" value="United States">
+              </label>
+              <label class="field">
+                <span>Deployer</span>
+                <input id="deployer" name="deployer">
+              </label>
+              <label class="field">
+                <span>Developer</span>
+                <input id="developer" name="developer">
+              </label>
+              <label class="field">
+                <span>System</span>
+                <input id="system_name" name="system_name">
+              </label>
+              <label class="field">
+                <span>News trigger</span>
+                <input id="news_trigger" name="news_trigger">
+              </label>
+            </div>
+
+            <div class="actions">
+              <button type="submit" class="primary-button">Predict</button>
+              <button type="button" id="sample-button" class="secondary-button">Sample</button>
+              <button type="button" id="clear-button" class="secondary-button">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <aside class="result-panel">
+          <div class="result-header">
+            <div>
+              <p class="eyebrow">Prediction</p>
+              <h2>Ethical Issue Tags</h2>
+            </div>
+            <div id="prediction-count" class="count">0</div>
+          </div>
+
+          <div id="selected-results" class="selected-results">
+            <div class="empty-state">Run a prediction to show thresholded tags.</div>
+          </div>
+
+          <div class="score-section">
+            <div class="score-header">
+              <h3>All Labels</h3>
+              <span>Probability / threshold</span>
+            </div>
+            <div id="all-scores" class="score-list"></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
