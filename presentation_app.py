@@ -30,6 +30,57 @@ MODEL_OPTIONS = {
         "default": False,
     },
 }
+NOTEBOOK_RESULTS = {
+    "dataset": [
+        {"label": "Incidents", "value": "2,251"},
+        {"label": "Raw columns", "value": "17"},
+        {"label": "Parsed year range", "value": "2008-2026"},
+        {"label": "Full duplicate rows", "value": "0"},
+    ],
+    "integrity": [
+        {"label": "Duplicated AIAAIC IDs", "value": "1"},
+        {"label": "Missing AIAAIC IDs", "value": "1"},
+        {"label": "Missing headlines", "value": "2"},
+        {"label": "Missing occurred year", "value": "171"},
+    ],
+    "top_issues": [
+        {"label": "Transparency", "count": 915},
+        {"label": "Accuracy/reliability", "count": 731},
+        {"label": "Privacy/surveillance", "count": 560},
+        {"label": "Accountability", "count": 559},
+        {"label": "Safety", "count": 510},
+        {"label": "Fairness", "count": 444},
+    ],
+    "top_jurisdictions": [
+        {"label": "USA", "count": 1154},
+        {"label": "UK", "count": 256},
+        {"label": "Multiple", "count": 231},
+        {"label": "China", "count": 123},
+        {"label": "Australia", "count": 66},
+        {"label": "India", "count": 55},
+    ],
+    "top_sectors": [
+        {"label": "Media/entertainment/sports/arts", "count": 445},
+        {"label": "Politics", "count": 181},
+        {"label": "Technology", "count": 136},
+        {"label": "Automotive", "count": 127},
+        {"label": "Education", "count": 112},
+        {"label": "Health", "count": 104},
+    ],
+    "model_scores": [
+        {"split": "random", "model": "TF-IDF baseline", "micro_f1": 0.6057, "macro_f1": 0.5600},
+        {"split": "random", "model": "TinyBERT", "micro_f1": 0.5639, "macro_f1": 0.5048},
+        {"split": "temporal", "model": "TF-IDF baseline", "micro_f1": 0.5813, "macro_f1": 0.4715},
+        {"split": "temporal", "model": "TinyBERT", "micro_f1": 0.5795, "macro_f1": 0.4545},
+    ],
+    "takeaways": [
+        "Most incidents are concentrated in recent years, which likely reflects data collection and reporting growth.",
+        "Sparse harm, consequence, and response fields are structural because those taxonomies only apply to subsets of incidents.",
+        "Several taxonomy fields are semicolon-delimited multi-label strings and must be exploded before counting.",
+        "The data skews toward highly reported jurisdictions and sectors, especially USA and media/entertainment.",
+        "The TF-IDF baseline is the current deployment candidate because it performs best on held-out test data.",
+    ],
+}
 
 
 app = FastAPI(
@@ -139,6 +190,11 @@ def health():
 @app.get("/api/models")
 def models():
     return {"default_model": DEFAULT_MODEL, "models": list(MODEL_OPTIONS.values())}
+
+
+@app.get("/api/results")
+def results():
+    return NOTEBOOK_RESULTS
 
 
 @app.get("/api/labels")

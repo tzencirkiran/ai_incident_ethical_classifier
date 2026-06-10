@@ -99,6 +99,65 @@
           </div>
         </aside>
       </section>
+
+      <section class="results-band" aria-label="Notebook and model results">
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">Notebook results</p>
+            <h2>EDA and Evaluation Summary</h2>
+          </div>
+          <span class="results-source">notebooks/eda.ipynb</span>
+        </div>
+
+        <div class="results-grid">
+          <article class="result-card">
+            <h3>Dataset Snapshot</h3>
+            <div id="dataset-stats" class="stat-grid"></div>
+          </article>
+
+          <article class="result-card">
+            <h3>Data Integrity</h3>
+            <div id="integrity-stats" class="stat-grid"></div>
+          </article>
+
+          <article class="result-card result-card-wide">
+            <h3>Model Scores</h3>
+            <div class="table-wrap">
+              <table class="score-table">
+                <thead>
+                  <tr>
+                    <th>Split</th>
+                    <th>Model</th>
+                    <th>Micro F1</th>
+                    <th>Macro F1</th>
+                  </tr>
+                </thead>
+                <tbody id="model-score-rows"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="result-card">
+            <h3>Top Ethical Issues</h3>
+            <div id="top-issues" class="bar-list"></div>
+          </article>
+
+          <article class="result-card">
+            <h3>Top Jurisdictions</h3>
+            <div id="top-jurisdictions" class="bar-list"></div>
+          </article>
+
+          <article class="result-card">
+            <h3>Top Sectors</h3>
+            <div id="top-sectors" class="bar-list"></div>
+          </article>
+
+          <article class="result-card result-card-wide">
+            <h3>Key Observations</h3>
+            <ul id="notebook-takeaways" class="takeaway-list"></ul>
+          </article>
+        </div>
+      </section>
     </main>
 
     <script src="/static/app.js"></script>

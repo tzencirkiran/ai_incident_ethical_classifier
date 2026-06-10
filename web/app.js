@@ -6,6 +6,13 @@ const predictionCount = document.querySelector("#prediction-count");
 const sampleButton = document.querySelector("#sample-button");
 const clearButton = document.querySelector("#clear-button");
 const activeModel = document.querySelector("#active-model");
+const datasetStats = document.querySelector("#dataset-stats");
+const integrityStats = document.querySelector("#integrity-stats");
+const modelScoreRows = document.querySelector("#model-score-rows");
+const topIssues = document.querySelector("#top-issues");
+const topJurisdictions = document.querySelector("#top-jurisdictions");
+const topSectors = document.querySelector("#top-sectors");
+const notebookTakeaways = document.querySelector("#notebook-takeaways");
 
 const samples = [
   {
@@ -192,6 +199,84 @@ async function checkHealth() {
   }
 }
 
+function renderStats(container, rows) {
+  container.innerHTML = "";
+  rows.forEach((item) => {
+    const element = document.createElement("div");
+    element.className = "stat-item";
+    element.innerHTML = `
+      <div class="stat-value"></div>
+      <div class="stat-label"></div>
+    `;
+    element.querySelector(".stat-value").textContent = item.value;
+    element.querySelector(".stat-label").textContent = item.label;
+    container.appendChild(element);
+  });
+}
+
+function renderBars(container, rows) {
+  container.innerHTML = "";
+  const max = Math.max(...rows.map((item) => item.count));
+  rows.forEach((item) => {
+    const element = document.createElement("div");
+    element.className = "bar-row";
+    element.innerHTML = `
+      <div class="bar-row-top">
+        <span class="bar-label"></span>
+        <span class="bar-count">${item.count.toLocaleString()}</span>
+      </div>
+      <div class="bar-track" aria-hidden="true"><div class="bar-fill"></div></div>
+    `;
+    element.querySelector(".bar-label").textContent = item.label;
+    element.querySelector(".bar-fill").style.width = `${Math.round((item.count / max) * 100)}%`;
+    container.appendChild(element);
+  });
+}
+
+function renderModelScores(rows) {
+  modelScoreRows.innerHTML = "";
+  rows.forEach((item) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td></td>
+      <td></td>
+      <td>${item.micro_f1.toFixed(4)}</td>
+      <td>${item.macro_f1.toFixed(4)}</td>
+    `;
+    row.children[0].textContent = item.split;
+    row.children[1].textContent = item.model;
+    modelScoreRows.appendChild(row);
+  });
+}
+
+function renderTakeaways(rows) {
+  notebookTakeaways.innerHTML = "";
+  rows.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    notebookTakeaways.appendChild(li);
+  });
+}
+
+async function loadResults() {
+  try {
+    const response = await fetch("/api/results");
+    if (!response.ok) {
+      throw new Error(`Results request failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    renderStats(datasetStats, data.dataset);
+    renderStats(integrityStats, data.integrity);
+    renderModelScores(data.model_scores);
+    renderBars(topIssues, data.top_issues);
+    renderBars(topJurisdictions, data.top_jurisdictions);
+    renderBars(topSectors, data.top_sectors);
+    renderTakeaways(data.takeaways);
+  } catch (error) {
+    notebookTakeaways.innerHTML = "<li>Notebook results are unavailable.</li>";
+  }
+}
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   predict();
@@ -204,3 +289,4 @@ Array.from(form.elements.model).forEach((input) => {
 });
 
 checkHealth();
+loadResults();

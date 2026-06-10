@@ -9,6 +9,7 @@ Multi-label classification for AI incident reports from the AIAAIC dataset. The 
 - Split-aware preprocessing for random and temporal evaluations
 - Per-label threshold tuning on validation data
 - Split-specific tuning and result artifacts
+- A FastAPI presentation UI with live inference and notebook EDA/results summaries
 
 ## Repository Layout
 
@@ -115,7 +116,7 @@ If the TF-IDF artifact is missing but the processed random split exists, the app
 - `make infer HEADLINE="..." [PURPOSE="..."] [TECHNOLOGY="..."] [SECTOR="..."]`
   - Runs a single prediction against the saved TinyBERT checkpoint
 - `make serve [HOST=...] [PORT=...]`
-  - Serves the FastAPI presentation UI with TF-IDF Logistic Regression as the default model and TinyBERT as a selectable comparison
+  - Serves the FastAPI presentation UI with TF-IDF Logistic Regression as the default model, TinyBERT as a selectable comparison, and notebook EDA/results summaries
 
 ## Tuning Profiles
 
