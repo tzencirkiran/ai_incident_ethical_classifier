@@ -12,13 +12,23 @@
         <div class="input-panel">
           <div class="panel-header">
             <div>
-              <p class="eyebrow">TinyBERT multi-label classifier</p>
+              <p class="eyebrow">Multi-label ethics classifier</p>
               <h1>AI Ethics Incident Classifier</h1>
             </div>
             <div id="status" class="status" data-state="loading">Loading</div>
           </div>
 
           <form id="incident-form" class="incident-form">
+            <div class="model-row" aria-label="Model selector">
+              <span class="model-row-label">Model</span>
+              <div class="model-selector">
+                <input type="radio" id="model-tfidf" name="model" value="tfidf" checked>
+                <label for="model-tfidf">TF-IDF Logistic Regression</label>
+                <input type="radio" id="model-tinybert" name="model" value="tinybert">
+                <label for="model-tinybert">TinyBERT</label>
+              </div>
+            </div>
+
             <label class="field field-wide">
               <span>Headline</span>
               <textarea id="headline" name="headline" rows="4" maxlength="500" required>AI hiring system rejects qualified applicants</textarea>
@@ -70,7 +80,7 @@
         <aside class="result-panel">
           <div class="result-header">
             <div>
-              <p class="eyebrow">Prediction</p>
+              <p id="active-model" class="eyebrow">TF-IDF Logistic Regression</p>
               <h2>Ethical Issue Tags</h2>
             </div>
             <div id="prediction-count" class="count">0</div>

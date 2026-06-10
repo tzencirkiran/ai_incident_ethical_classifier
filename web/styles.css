@@ -141,6 +141,53 @@ h3 {
   margin-top: 26px;
 }
 
+.model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.model-row-label {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.model-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 4px;
+  gap: 4px;
+}
+
+.model-selector input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.model-selector label {
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+  min-height: 38px;
+  padding: 9px 10px;
+  text-align: center;
+}
+
+.model-selector input:checked + label {
+  background: var(--accent);
+  color: var(--surface);
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -339,9 +386,14 @@ button:disabled {
 
 @media (max-width: 620px) {
   .panel-header,
-  .result-header {
+  .result-header,
+  .model-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .model-selector {
+    grid-template-columns: 1fr;
   }
 
   .field-grid {

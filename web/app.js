@@ -5,6 +5,7 @@ const allScores = document.querySelector("#all-scores");
 const predictionCount = document.querySelector("#prediction-count");
 const sampleButton = document.querySelector("#sample-button");
 const clearButton = document.querySelector("#clear-button");
+const activeModel = document.querySelector("#active-model");
 
 const samples = [
   {
@@ -65,6 +66,7 @@ function setLoading(isLoading) {
 
 function payloadFromForm() {
   return {
+    model: form.elements.model.value,
     headline: fieldValue("headline"),
     purpose: fieldValue("purpose") || null,
     technology: fieldValue("technology") || null,
@@ -119,6 +121,14 @@ function renderScores(scores) {
   });
 }
 
+function updateActiveModel(data) {
+  if (data && data.model && data.model.name) {
+    activeModel.textContent = data.model.name;
+    return;
+  }
+  activeModel.textContent = form.elements.model.value === "tinybert" ? "TinyBERT" : "TF-IDF Logistic Regression";
+}
+
 async function predict() {
   const payload = payloadFromForm();
   if (!payload.headline) {
@@ -140,6 +150,7 @@ async function predict() {
     }
 
     const data = await response.json();
+    updateActiveModel(data);
     renderSelected(data.predictions);
     renderScores(data.scores);
     setStatus("Ready", "ready");
@@ -161,10 +172,12 @@ function applySample() {
 
 function clearForm() {
   form.reset();
-  form.querySelectorAll("input, textarea").forEach((field) => {
+  form.querySelectorAll("input:not([type='radio']), textarea").forEach((field) => {
     field.value = "";
   });
+  form.elements.model.value = "tfidf";
   predictionCount.textContent = "0";
+  updateActiveModel();
   selectedResults.innerHTML = '<div class="empty-state">Run a prediction to show thresholded tags.</div>';
   allScores.innerHTML = "";
 }
@@ -186,5 +199,8 @@ form.addEventListener("submit", (event) => {
 
 sampleButton.addEventListener("click", applySample);
 clearButton.addEventListener("click", clearForm);
+Array.from(form.elements.model).forEach((input) => {
+  input.addEventListener("change", updateActiveModel);
+});
 
 checkHealth();

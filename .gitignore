@@ -63,6 +63,7 @@ Thumbs.db
 # Logs / output
 *.log
 logs/
+model/baseline_checkpoint/
 model/tuning/
 model/results/
 model/processed/*/
