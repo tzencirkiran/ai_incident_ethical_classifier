@@ -63,7 +63,10 @@ Thumbs.db
 # Logs / output
 *.log
 logs/
-model/baseline_checkpoint/
+model/baseline_checkpoint/*
+!model/baseline_checkpoint/random/
+model/baseline_checkpoint/random/*
+!model/baseline_checkpoint/random/tfidf_logistic.pkl
 model/tuning/
 model/results/
 model/processed/*/

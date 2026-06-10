@@ -86,7 +86,7 @@ The app needs the FastAPI files and at least one serving artifact:
   - `model/baseline_service.py`
   - `model/infer.py`
 - Default TF-IDF model:
-  - preferred: `model/baseline_checkpoint/random/tfidf_logistic.pkl`
+  - included artifact: `model/baseline_checkpoint/random/tfidf_logistic.pkl`
   - or rebuild inputs: `model/processed/random/train.pt`, `model/processed/random/val.pt`, and `model/processed/random/label_classes.npy`
 - TinyBERT comparison model:
   - `model/checkpoint/`
