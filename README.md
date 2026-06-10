@@ -2,6 +2,8 @@
 
 Multi-label classification for AI incident reports from the AIAAIC dataset. The project predicts ethical-issue tags such as `Privacy/surveillance`, `Fairness`, `Safety`, and `Transparency` from incident text plus selected metadata.
 
+https://drive.google.com/file/d/1Je1d9OU7PhdYxzCnEuBNwGBwK_wl5oro/view?usp=sharing
+
 ## What is included
 
 - A TF-IDF + logistic regression baseline
